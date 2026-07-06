@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum EmployeeStatus {
+  PROBATION // Thử việc
+  ACTIVE // Chính thức
+  INACTIVE // Đã nghỉ việc
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayrollStatus {
+  DRAFT
+  FINALIZED
+}
+
+// ==================== Tài khoản & phân quyền ====================
+model User {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  password   String
+  role       Role      @default(EMPLOYEE)
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId String?   @unique
+  createdAt  DateTime  @default(now())
+}
+
+// ==================== Tổ chức ====================
+model Department {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  managerId String? // Employee.id của trưởng phòng (người duyệt đơn)
+  employees Employee[]
+  createdAt DateTime   @default(now())
+}
+
+// ==================== Hồ sơ nhân sự ====================
+model Employee {
+  id           String         @id @default(cuid())
+  code         String         @unique // Mã nhân viên (trùng mã trên máy chấm công)
+  fullName     String
+  dob          DateTime?
+  gender       String?
+  phone        String?
+  email        String?
+  nationalId   String? // CCCD
+  address      String?
+  joinDate     DateTime
+  status       EmployeeStatus @default(ACTIVE)
+  position     String? // Chức vụ
+  contractType String? // Loại hợp đồng
+  baseSalary   Int            @default(0) // Lương cơ bản (VNĐ/tháng)
+  allowance    Int            @default(0) // Phụ cấp (VNĐ/tháng)
+  bankAccount  String?
+  bankName     String?
+
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentId String?
+
+  user               User?
+  shiftRegistrations ShiftRegistration[]
+  attendanceDays     AttendanceDay[]
+  leaveRequests      LeaveRequest[]
+  leaveBalances      LeaveBalance[]
+  payslips           Payslip[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==================== Ca làm việc ====================
+model Shift {
+  id            String              @id @default(cuid())
+  code          String              @unique
+  name          String
+  startTime     String // "08:00"
+  endTime       String // "17:30"
+  breakMinutes  Int                 @default(60)
+  registrations ShiftRegistration[]
+}
+
+model ShiftRegistration {
+  id         String        @id @default(cuid())
+  employee   Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  shift      Shift         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  shiftId    String
+  startDate  DateTime      @db.Date
+  endDate    DateTime      @db.Date
+  note       String?
+  status     RequestStatus @default(PENDING)
+  approverId String?
+  createdAt  DateTime      @default(now())
+}
+
+// ==================== Chấm công ====================
+// Dữ liệu thô import từ máy chấm công
+model AttendanceRecord {
+  id           String   @id @default(cuid())
+  employeeCode String
+  timestamp    DateTime
+  device       String?
+  createdAt    DateTime @default(now())
+
+  @@unique([employeeCode, timestamp])
+  @@index([employeeCode, timestamp])
+}
+
+// Công đã tổng hợp theo ngày
+model AttendanceDay {
+  id          String    @id @default(cuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  date        DateTime  @db.Date
+  checkIn     DateTime?
+  checkOut    DateTime?
+  workHours   Float     @default(0)
+  otHours     Float     @default(0)
+  lateMinutes Int       @default(0)
+  status      String    @default("ABSENT") // PRESENT | ABSENT | LEAVE | WEEKEND
+  note        String?
+
+  @@unique([employeeId, date])
+}
+
+// ==================== Nghỉ phép ====================
+model LeaveType {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  name        String
+  paid        Boolean        @default(true) // Có hưởng lương không
+  annualQuota Int            @default(0) // Số ngày/năm (0 = không giới hạn)
+  requests    LeaveRequest[]
+}
+
+model LeaveBalance {
+  id         String   @id @default(cuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  year       Int
+  entitled   Float    @default(12) // Số ngày phép được hưởng
+  used       Float    @default(0) // Số ngày đã dùng
+
+  @@unique([employeeId, year])
+}
+
+model LeaveRequest {
+  id          String        @id @default(cuid())
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  leaveType   LeaveType     @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId String
+  startDate   DateTime      @db.Date
+  endDate     DateTime      @db.Date
+  days        Float
+  reason      String?
+  status      RequestStatus @default(PENDING)
+  approverId  String?
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+}
+
+// ==================== Bảng lương ====================
+model PayrollPeriod {
+  id           String        @id @default(cuid())
+  month        Int
+  year         Int
+  standardDays Float         @default(26) // Ngày công chuẩn
+  status       PayrollStatus @default(DRAFT)
+  payslips     Payslip[]
+  createdAt    DateTime      @default(now())
+
+  @@unique([month, year])
+}
+
+model Payslip {
+  id                 String        @id @default(cuid())
+  period             PayrollPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  periodId           String
+  employee           Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId         String
+  workDays           Float         @default(0) // Ngày công thực tế
+  paidLeaveDays      Float         @default(0) // Ngày phép hưởng lương
+  otHours            Float         @default(0)
+  baseSalary         Int           @default(0)
+  allowance          Int           @default(0)
+  salaryByDays       Int           @default(0) // Lương theo ngày công
+  otPay              Int           @default(0)
+  grossPay           Int           @default(0)
+  insuranceDeduction Int           @default(0) // BHXH-BHYT-BHTN (10.5%)
+  taxDeduction       Int           @default(0) // Thuế TNCN
+  otherDeduction     Int           @default(0)
+  netPay             Int           @default(0)
+
+  @@unique([periodId, employeeId])
+}
