@@ -38,16 +38,38 @@ export async function generatePayroll(fd: FormData) {
   const end = new Date(Date.UTC(year, month, 0)); // ngày cuối tháng
   const endExclusive = new Date(Date.UTC(year, month, 1));
 
-  const employees = await prisma.employee.findMany({ where: { status: { not: "INACTIVE" } } });
+  // Lấy toàn bộ dữ liệu tháng trong 3 truy vấn rồi tính trong bộ nhớ —
+  // tránh hàng trăm truy vấn tuần tự khi công ty có nhiều nhân viên
+  const [employees, allDays, allPaidLeaves] = await Promise.all([
+    prisma.employee.findMany({ where: { status: { not: "INACTIVE" } } }),
+    prisma.attendanceDay.findMany({ where: { date: { gte: start, lt: endExclusive } } }),
+    prisma.leaveRequest.findMany({
+      where: {
+        status: "APPROVED",
+        leaveType: { paid: true },
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+    }),
+  ]);
 
-  for (const emp of employees) {
-    // Ngày công thực tế từ bảng công
-    const days = await prisma.attendanceDay.findMany({
-      where: { employeeId: emp.id, date: { gte: start, lt: endExclusive } },
-    });
+  const daysByEmp = new Map<string, typeof allDays>();
+  for (const d of allDays) {
+    const list = daysByEmp.get(d.employeeId) ?? [];
+    list.push(d);
+    daysByEmp.set(d.employeeId, list);
+  }
+  const leavesByEmp = new Map<string, typeof allPaidLeaves>();
+  for (const l of allPaidLeaves) {
+    const list = leavesByEmp.get(l.employeeId) ?? [];
+    list.push(l);
+    leavesByEmp.set(l.employeeId, list);
+  }
+
+  const slips = employees.map((emp) => {
     let workDays = 0;
     let otHours = 0;
-    for (const d of days) {
+    for (const d of daysByEmp.get(emp.id) ?? []) {
       if (d.status === "PRESENT") {
         // quy đổi giờ làm thành công (làm tròn 0.5, tối đa 1 công/ngày)
         workDays += Math.min(1, Math.round((d.workHours / 8) * 2) / 2);
@@ -55,18 +77,8 @@ export async function generatePayroll(fd: FormData) {
       otHours += d.otHours;
     }
 
-    // Ngày phép hưởng lương đã duyệt trong tháng
-    const paidLeaves = await prisma.leaveRequest.findMany({
-      where: {
-        employeeId: emp.id,
-        status: "APPROVED",
-        leaveType: { paid: true },
-        startDate: { lte: end },
-        endDate: { gte: start },
-      },
-    });
     let paidLeaveDays = 0;
-    for (const l of paidLeaves) {
+    for (const l of leavesByEmp.get(emp.id) ?? []) {
       const s = l.startDate.getTime() > start.getTime() ? l.startDate : start;
       const e = l.endDate.getTime() < end.getTime() ? l.endDate : end;
       paidLeaveDays += businessDaysBetween(s, e);
@@ -81,28 +93,22 @@ export async function generatePayroll(fd: FormData) {
       otHours,
     });
 
-    await prisma.payslip.upsert({
-      where: { periodId_employeeId: { periodId, employeeId: emp.id } },
-      create: {
-        periodId,
-        employeeId: emp.id,
-        workDays,
-        paidLeaveDays,
-        otHours,
-        baseSalary: emp.baseSalary,
-        allowance: emp.allowance,
-        ...calc,
-      },
-      update: {
-        workDays,
-        paidLeaveDays,
-        otHours,
-        baseSalary: emp.baseSalary,
-        allowance: emp.allowance,
-        ...calc,
-      },
-    });
-  }
+    return {
+      periodId,
+      employeeId: emp.id,
+      workDays,
+      paidLeaveDays,
+      otHours,
+      baseSalary: emp.baseSalary,
+      allowance: emp.allowance,
+      ...calc,
+    };
+  });
+
+  await prisma.$transaction([
+    prisma.payslip.deleteMany({ where: { periodId } }),
+    prisma.payslip.createMany({ data: slips }),
+  ]);
 
   revalidatePath(`/payroll/${periodId}`);
   redirect(`/payroll/${periodId}?message=` + encodeURIComponent("Đã tính lương cho " + employees.length + " nhân viên"));

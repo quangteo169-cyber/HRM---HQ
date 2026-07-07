@@ -114,7 +114,20 @@ export async function processAttendanceMonth(year: number, month: number) {
     );
   }
 
-  let processed = 0;
+  // Tính toàn bộ trong bộ nhớ rồi ghi hàng loạt (2 truy vấn)
+  // thay vì upsert từng dòng — cần thiết khi có hàng trăm nhân viên
+  type DayRow = {
+    employeeId: string;
+    date: Date;
+    checkIn: Date | null;
+    checkOut: Date | null;
+    workHours: number;
+    otHours: number;
+    lateMinutes: number;
+    status: string;
+    note: string | null;
+  };
+  const rows: DayRow[] = [];
   for (const emp of employees) {
     for (let d = 1; d <= totalDays; d++) {
       const date = new Date(Date.UTC(year, month - 1, d));
@@ -164,13 +177,13 @@ export async function processAttendanceMonth(year: number, month: number) {
         }
       }
 
-      await prisma.attendanceDay.upsert({
-        where: { employeeId_date: { employeeId: emp.id, date } },
-        create: { employeeId: emp.id, date, checkIn, checkOut, workHours, otHours, lateMinutes, status, note },
-        update: { checkIn, checkOut, workHours, otHours, lateMinutes, status, note },
-      });
-      processed++;
+      rows.push({ employeeId: emp.id, date, checkIn, checkOut, workHours, otHours, lateMinutes, status, note });
     }
   }
-  return processed;
+
+  await prisma.$transaction([
+    prisma.attendanceDay.deleteMany({ where: { date: { gte: start, lt: end } } }),
+    prisma.attendanceDay.createMany({ data: rows }),
+  ]);
+  return rows.length;
 }
