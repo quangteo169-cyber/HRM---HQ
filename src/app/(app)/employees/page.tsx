@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireUser, CAN_MANAGE_HR } from "@/lib/auth";
-import { FlashMessage, PageHeader, StatusBadge } from "@/components/ui";
+import { Avatar, FlashMessage, PageHeader, StatusBadge } from "@/components/ui";
 import { fmtDate, fmtMoney } from "@/lib/utils";
 
 export default async function EmployeesPage({
@@ -85,7 +85,8 @@ export default async function EmployeesPage({
               <tr key={e.id} className="hover:bg-slate-50">
                 <td className="td font-mono">{e.code}</td>
                 <td className="td">
-                  <Link href={`/employees/${e.id}`} className="font-medium text-blue-600 hover:underline">
+                  <Link href={`/employees/${e.id}`} className="flex items-center gap-2.5 font-medium text-slate-800 hover:text-blue-600">
+                    <Avatar name={e.fullName} size="sm" />
                     {e.fullName}
                   </Link>
                 </td>
