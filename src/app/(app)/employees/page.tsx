@@ -40,9 +40,14 @@ export default async function EmployeesPage({
     <div>
       <PageHeader title="Hồ sơ nhân sự" subtitle={`${employees.length} nhân viên`}>
         {canEdit && (
-          <Link href="/employees/new" className="btn-primary">
-            ➕ Thêm nhân viên
-          </Link>
+          <>
+            <Link href="/employees/import" className="btn-secondary">
+              📥 Import Excel
+            </Link>
+            <Link href="/employees/new" className="btn-primary">
+              ➕ Thêm nhân viên
+            </Link>
+          </>
         )}
       </PageHeader>
 

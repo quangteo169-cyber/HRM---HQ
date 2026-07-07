@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser, CAN_MANAGE_HR } from "@/lib/auth";
 import { toDateOnly } from "@/lib/utils";
+import { importEmployees } from "@/lib/employee-import";
 
 function str(fd: FormData, key: string): string | null {
   const v = fd.get(key);
@@ -74,6 +75,41 @@ export async function updateEmployee(fd: FormData) {
   await prisma.employee.update({ where: { id: id! }, data });
   revalidatePath("/employees");
   redirect(`/employees/${id}?message=` + encodeURIComponent("Đã lưu thay đổi"));
+}
+
+export async function importEmployeesFile(fd: FormData) {
+  await requireUser(CAN_MANAGE_HR);
+  const file = fd.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect("/employees/import?error=" + encodeURIComponent("Vui lòng chọn file Excel/CSV"));
+  }
+  const buf = Buffer.from(await (file as File).arrayBuffer());
+
+  let result;
+  try {
+    result = await importEmployees(buf);
+  } catch (e) {
+    redirect(
+      "/employees/import?error=" +
+        encodeURIComponent("Không đọc được file. Hãy dùng file .xlsx theo mẫu tải về.")
+    );
+  }
+
+  const r = result!;
+  if (r.created === 0 && r.updated === 0) {
+    redirect(
+      "/employees/import?error=" +
+        encodeURIComponent(
+          "Không nhập được dòng nào. " + (r.errors[0] ?? "Kiểm tra lại định dạng file theo mẫu.")
+        )
+    );
+  }
+  let msg = `Đã nhập thành công: ${r.created} nhân viên mới, cập nhật ${r.updated} nhân viên.`;
+  if (r.errors.length > 0) {
+    msg += ` Bỏ qua ${r.errors.length} dòng lỗi: ${r.errors.slice(0, 3).join("; ")}${r.errors.length > 3 ? "..." : ""}`;
+  }
+  revalidatePath("/employees");
+  redirect("/employees/import?message=" + encodeURIComponent(msg));
 }
 
 export async function deactivateEmployee(fd: FormData) {
