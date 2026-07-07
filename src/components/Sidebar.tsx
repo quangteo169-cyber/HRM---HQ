@@ -55,10 +55,12 @@ export default function Sidebar({
   role,
   name,
   pendingCount,
+  onNavigate,
 }: {
   role: string;
   name: string;
   pendingCount?: number;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const initials = name
@@ -70,7 +72,7 @@ export default function Sidebar({
     .toUpperCase();
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col bg-slate-900">
+    <aside className="flex h-dvh w-64 shrink-0 flex-col bg-slate-900">
       <div className="flex items-center gap-3 px-5 py-5">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 font-black text-white shadow-lg shadow-blue-500/30">
           HQ
@@ -99,6 +101,7 @@ export default function Sidebar({
                     <Link
                       key={item.href}
                       href={item.href}
+                      onClick={onNavigate}
                       className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
                         active
                           ? "bg-blue-600/15 text-white"

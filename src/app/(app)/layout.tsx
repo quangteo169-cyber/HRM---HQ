@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
 
 export const dynamic = "force-dynamic";
 
@@ -33,17 +33,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }).format(new Date());
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role={role} name={name ?? email ?? ""} pendingCount={pendingCount} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-6 backdrop-blur">
-          <div className="text-sm capitalize text-slate-500">📆 {today}</div>
-          <div className="flex items-center gap-2 text-sm text-slate-600">
-            <span className="hidden font-medium sm:inline">{name ?? email}</span>
-          </div>
-        </header>
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">{children}</main>
-      </div>
-    </div>
+    <AppShell
+      role={role}
+      name={name ?? email ?? ""}
+      pendingCount={pendingCount}
+      today={today}
+    >
+      {children}
+    </AppShell>
   );
 }
