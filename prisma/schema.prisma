@@ -177,6 +177,16 @@ model LeaveRequest {
   createdAt   DateTime      @default(now())
 }
 
+// ==================== Bảng tin công ty ====================
+model Announcement {
+  id         String   @id @default(cuid())
+  title      String
+  content    String
+  tag        String? // VD: LỊCH NGHỈ, QUY ĐỊNH, SỰ KIỆN
+  authorName String
+  createdAt  DateTime @default(now())
+}
+
 // ==================== Bảng lương ====================
 model PayrollPeriod {
   id           String        @id @default(cuid())

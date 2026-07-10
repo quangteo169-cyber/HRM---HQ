@@ -61,16 +61,17 @@ export async function reviewShiftRegistration(fd: FormData) {
   const user = await requireUser(CAN_APPROVE);
   const id = String(fd.get("id") ?? "");
   const decision = String(fd.get("decision") ?? "");
+  const back = fd.get("back") === "/dashboard" ? "/dashboard" : "/approvals";
   const reg = await prisma.shiftRegistration.findUnique({
     where: { id },
     include: { employee: { include: { department: true } } },
   });
-  if (!reg || reg.status !== "PENDING") redirect("/approvals");
+  if (!reg || reg.status !== "PENDING") redirect(back);
 
   if (user.role === "MANAGER") {
     const isManager = reg.employee.department?.managerId === user.employeeId;
     if (!isManager) {
-      redirect("/approvals?error=" + encodeURIComponent("Bạn không phải quản lý của nhân viên này"));
+      redirect(back + "?error=" + encodeURIComponent("Bạn không phải quản lý của nhân viên này"));
     }
   }
 
@@ -79,5 +80,6 @@ export async function reviewShiftRegistration(fd: FormData) {
     data: { status: decision === "approve" ? "APPROVED" : "REJECTED", approverId: user.id },
   });
   revalidatePath("/approvals");
-  redirect("/approvals?message=" + encodeURIComponent(decision === "approve" ? "Đã duyệt đăng ký ca" : "Đã từ chối đăng ký ca"));
+  revalidatePath("/dashboard");
+  redirect(back + "?message=" + encodeURIComponent(decision === "approve" ? "Đã duyệt đăng ký ca" : "Đã từ chối đăng ký ca"));
 }

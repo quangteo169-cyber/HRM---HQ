@@ -68,16 +68,17 @@ export async function reviewLeaveRequest(fd: FormData) {
   const user = await requireUser(CAN_APPROVE);
   const id = String(fd.get("id") ?? "");
   const decision = String(fd.get("decision") ?? "");
+  const back = fd.get("back") === "/dashboard" ? "/dashboard" : "/approvals";
   const req = await prisma.leaveRequest.findUnique({
     where: { id },
     include: { employee: { include: { department: true } }, leaveType: true },
   });
-  if (!req || req.status !== "PENDING") redirect("/approvals");
+  if (!req || req.status !== "PENDING") redirect(back);
 
   if (user.role === "MANAGER") {
     const isManager = req.employee.department?.managerId === user.employeeId;
     if (!isManager) {
-      redirect("/approvals?error=" + encodeURIComponent("Bạn không phải quản lý của nhân viên này"));
+      redirect(back + "?error=" + encodeURIComponent("Bạn không phải quản lý của nhân viên này"));
     }
   }
 
@@ -99,7 +100,8 @@ export async function reviewLeaveRequest(fd: FormData) {
 
   revalidatePath("/approvals");
   revalidatePath("/leaves");
-  redirect("/approvals?message=" + encodeURIComponent(approved ? "Đã duyệt đơn nghỉ phép" : "Đã từ chối đơn nghỉ phép"));
+  revalidatePath("/dashboard");
+  redirect(back + "?message=" + encodeURIComponent(approved ? "Đã duyệt đơn nghỉ phép" : "Đã từ chối đơn nghỉ phép"));
 }
 
 export async function updateLeaveBalance(fd: FormData) {

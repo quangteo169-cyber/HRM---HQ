@@ -9,7 +9,10 @@ type Group = { title?: string; items: Item[] };
 
 const NAV_GROUPS: Group[] = [
   {
-    items: [{ href: "/dashboard", label: "Tổng quan", icon: "📊" }],
+    items: [
+      { href: "/dashboard", label: "Tổng quan", icon: "📊" },
+      { href: "/announcements", label: "Bảng tin công ty", icon: "📢" },
+    ],
   },
   {
     title: "Nhân sự",
